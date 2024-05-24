@@ -1,0 +1,72 @@
+     1                                 %line 1+1 xoroshiro64.s
+     2                                 
+     3                                 
+     4                                 
+     5                                 [section .data]
+     6                                 
+     7 00000000 4A190200               s0: dd 137546
+     8 00000004 D9020000               s1: dd 729
+     9                                 
+    10 00000008 00000000               buffer: dd 0
+    11                                 
+    12                                 [section .text]
+    13                                 
+    14                                 [global _start]
+    15                                 _start:
+    16                                 
+    17 00000000 55                      push rbp
+    18 00000001 4889E5                  mov rbp, rsp
+    19                                 
+    20                                 .loop:
+    21                                 
+    22 00000004 E833000000              call next
+    23 00000009 890425[00000000]        mov dword [buffer], eax
+    24                                 
+    25 00000010 48C7C001000000          mov rax, 1
+    26 00000017 48C7C701000000          mov rdi, 1
+    27 0000001E 48C7C6[00000000]        mov rsi, buffer
+    28 00000025 48C7C204000000          mov rdx, 4
+    29 0000002C 0F05                    syscall
+    30                                 
+    31 0000002E EBD2                    jmp .loop
+    32                                 
+    33 00000030 5D                      pop rbp
+    34                                 
+    35 00000031 48C7C03C000000          mov rax, 60
+    36 00000038 48C7C700000000          mov rdi, 0
+    37 0000003F 0F05                    syscall
+    38                                 
+    39                                 next:
+    40                                 
+    41                                 
+    42 00000041 448B2425[00000000]      mov r12d, dword[s0]
+    43 00000049 448B2C25[00000000]      mov r13d, dword[s1]
+    44 00000051 BBBB79379E              mov ebx, 0x9E3779BB
+    45                                 
+    46                                 
+    47 00000056 4831C0                  xor rax, rax
+    48 00000059 4831D2                  xor rdx, rdx
+    49                                 
+    50                                 
+    51 0000005C 4489E0                  mov eax, r12d
+    52 0000005F F7E3                    mul ebx
+    53 00000061 C1C005                  rol eax, 5
+    54 00000064 89C3                    mov ebx, eax
+    55 00000066 C1E302                  shl ebx, 2
+    56 00000069 01D8                    add eax, ebx
+    57                                 
+    58                                 
+    59 0000006B 4531E5                  xor r13d, r12d
+    60 0000006E 41C1C41A                rol r12d, 26
+    61 00000072 4531EC                  xor r12d, r13d
+    62 00000075 4489EB                  mov ebx, r13d
+    63 00000078 C1E309                  shl ebx, 9
+    64 0000007B 4131DC                  xor r12d, ebx
+    65 0000007E 44892425[00000000]      mov dword[s0], r12d
+    66                                 
+    67                                 
+    68 00000086 41C1C50D                rol r13d, 13
+    69 0000008A 44892C25[00000000]      mov dword[s1], r13d
+    70                                 
+    71                                 
+    72 00000092 C3                      ret

@@ -1,0 +1,93 @@
+#include "cache_unit.h"
+
+cache_unit::cache_unit()
+{
+		m_cost = 0;
+		m_line_size = 0;
+		m_total_lines = 0;
+		m_addresses = nullptr;
+		m_ages = nullptr;
+}
+
+cache_unit::cache_unit(int cost, int line_size, int total_lines)
+{
+		m_cost = cost;
+		m_line_size = line_size;
+		m_total_lines = total_lines;
+		init_cache();
+}
+
+cache_unit::~cache_unit()
+{
+		if (m_addresses != nullptr)
+				delete[] m_addresses;
+		if (m_ages != nullptr)
+				delete[] m_ages;
+}
+
+void cache_unit::init_cache()
+{
+		m_addresses = new int[m_total_lines];
+		m_ages = new int[m_total_lines];
+		for (int i=0; i < m_total_lines; ++i)
+		{
+				m_addresses[i] = -1;
+				m_ages[i] = -1;
+		}
+}
+
+int cache_unit::get_cost()
+{
+		return m_cost;
+}
+
+int cache_unit::get_rounded_address(int address)
+{
+		return (address / m_line_size) * m_line_size;
+}
+
+bool cache_unit::check_cache(int address)
+{
+	bool found = false;
+	int end_address = -1;
+	// loop through each index
+	for (int i = 0; i < m_total_lines; ++i)
+	{
+		// check if current address is uninitalized
+		if (m_addresses[i] == -1)
+			continue;
+
+		// calculate end address
+		end_address = m_addresses[i] + m_line_size - 1;
+
+		// check if target is within address range
+		if (address >= m_addresses[i] && address <= end_address)
+				found = true;
+		else
+				++m_ages[i];
+	}
+
+	return found;
+}
+
+int cache_unit::next_free_cache()
+{
+		int target_index = 0
+		for (int i = 0; i < m_total_lines; ++i)
+		{
+				if (m_addresses[i] == -1)
+						return i;
+				if (m_ages[i] > m_ages[target_index])
+						target_index = i;
+		}
+		return target_index;
+}
+
+void cache_unit::update_cache(int address)
+{
+		int new_address = get_rounded_address(address);
+		int target_line = next_free_cache();
+
+		m_addresses[target_line] = new_address;
+		m_ages[target_line] = 0;
+}

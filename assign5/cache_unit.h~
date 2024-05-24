@@ -1,0 +1,27 @@
+#ifndef CACHE_UNIT_HEADER
+#define CACHE_UNIT_HEADER
+
+class cache_unit
+{
+		public:
+				cache_unit();
+
+				cache_unit(int cost, int line_size, int total_lines);
+
+				~cache_unit();
+
+				bool check_cache(int address);
+				int get_cost();
+				void update_cache(int address);
+
+		private:
+				int m_cost;
+				int m_line_size;
+				int m_total_lines;
+				int *m_addresses;
+				int *m_ages;
+				int get_rounded_address(int address);
+				void init_cache();
+				int next_free_cache();
+}
+#endif

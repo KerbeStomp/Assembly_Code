@@ -1,0 +1,225 @@
+;;;
+;;; two-stage.s
+;;; Illustrates a two-stage loader, where the first strage invookes the BIOS
+;;; to load the second stage.
+;;;
+
+bits 16
+org 0x7C00
+
+start:
+orgin: equ 0x7C00
+blk_count: equ (end - loaded_code) / 512 + 1
+
+; ------------------------------------------------------------------------------
+; First stage loader
+
+; Reset disk
+mov ah, 0x0 ; Subfunction reset
+mov dl, 0x80 ; Disk number
+int 0x13
+
+; Load blocks
+mov ah, 0x42 ; Int 0x13, subfunction Extended Read
+mov dl, 0x80 ; Drive num
+mov si, disk_packet ; Packet address
+int 0x13
+
+jmp loaded_code
+
+; -----------------------------------------------------------------------------
+; Begin "pseudo-data" section
+
+string: db "Enter your name: "
+strlen: equ $-string
+buffer: times 50 db 0
+buflen: equ $-buffer
+response: db "Hello, "
+responselen: equ $-response
+screen_addr: equ 0xb8000
+
+align 2
+disk_packet: db 0x10 ; Packet size
+			 db 0    ; Reserved
+			 dw blk_count ; Block count
+			 dd loaded_code ; Addr. to load
+			 dd 1 ; Starting block
+
+; Pad remainder with 0 bytes
+times 510 - ($ - $$) db 0
+dw 0xaa55
+
+; ------------------------------------------------------------------------------
+; Begin second-stage loader
+
+loaded_code:
+
+; Set 80x25 text mode
+mov ah, 0x0
+mov al, 0x3
+int 0x10
+
+; Print text
+mov si, 0 ; Memory index/cursor position
+print:
+	; Print character
+	mov ah, 0x0a ; Subfucnction = write char
+	mov al, byte [si + string]
+	mov bh, 0 ; Page = 0
+	mov cx, 1 ; Write count = 1
+	int 0x10
+
+	; Move curosr
+	inc si
+	mov ah, 0x02 ; Subfunction = set cursor pos.
+	mov bh, 0 ; Page = 0
+	mov dh, 0 ; Cursor row = 0
+	mov dx, si ; Cursor col = si
+	mov dh, 0
+	int 0x10
+
+	cmp si, strlen
+	jne print
+
+mov di, si
+mov si, 0
+get_keystroke:
+	; check if exceeded buffer
+	cmp si, buflen
+	je print_back
+
+	; Get key input from user
+	mov ah, 0x0 ; Subfunction 0 = get key
+	int 0x16
+	
+	; Check if enter key was pressed
+	cmp al, 13
+	je print_back
+
+	cmp al, 8
+	je .backspace
+
+	mov byte [si + buffer], al ; store key in array
+	inc si ; update buffer position	
+
+	; Print char
+	mov ah, 0x0a ; Subfunction = write char to cursor
+	mov bh, 0 ; page number
+	mov cx, 1 ; times to print
+	int 0x10 ; char ASCII already stored in al
+
+	inc di ; update cursor counter
+	mov ah, 0x02 ; subfunction = set cursor  
+	mov bh, 0 ; page number
+	mov dx, di ; cursor col
+	mov dh, 0 ; cursor row 
+	int 0x10
+
+	jmp get_keystroke
+
+.backspace:
+	; make sure buffer is not at beginning
+	cmp si, 0
+	je get_keystroke
+
+	dec di
+	dec si
+	mov byte [si + buffer], 0
+	
+	; move cursor back
+	mov ah, 0x02
+	mov bh, 0
+	mov dx, di
+	mov dh, 0
+	int 0x10
+
+	; print null char
+	mov ah, 0x0a
+	mov al, 0
+	mov bh, 0
+	mov cx, 1
+	int 0x10
+
+	jmp get_keystroke
+	
+print_back: ; si = name length
+	xor di, di
+	xor si, si
+
+	; move cursor to next line
+	mov ah, 0x02 ; subfunction = set cursor
+	mov bh, 0 ; page number
+	mov dx, 0 ; cursor col
+	mov dh, 1 ; cursor row
+	int 0x10
+
+.print_response:
+	cmp di, responselen
+	je .print_name
+	
+	; print char
+	mov ah, 0x0a ; subfunction = print at cursor
+	mov al, byte [di + response] ; char to print
+	mov bh, 0 ; page number
+	mov cx, 1 ; num of copies
+	int 0x10
+
+	inc di ; update cursor counter
+	mov ah, 0x02 ; subfunction = set cursor
+	mov bh, 0 ; page number
+	mov dx, di ; cursor col
+	mov dh, 1 ; cursor row
+	int 0x10
+	
+	jmp .print_response
+
+.print_name:
+	; check for null terminating 0
+	cmp byte [si + buffer], 0
+	je .print_end
+	
+	; print char
+	mov ah, 0x0a ; subfunction = print at cursor
+	mov al, byte [si + buffer] ; char to print
+	mov bh, 0 ; page number
+	mov cx, 1 ; num of copies
+	int 0x10
+
+	; update string position in si
+	inc si
+
+	; move cursor
+	inc di ; update cursor counter
+	mov ah, 0x02
+	mov bh, 0
+	mov dx, di ; cursor col
+	mov dh, 1; cursor row
+	int 0x10
+	
+	jmp .print_name
+
+.print_end:
+	; print '!'
+	mov ah, 0x0a
+	mov al, 33
+	mov bh, 0
+	mov cx, 1
+	int 0x10
+
+	; update cursor
+	inc di
+	mov ah, 0x02
+	mov bh, 0
+	mov dx, di
+	mov dh, 1
+	int 0x10
+	
+	jmp forever
+
+; Infinite loop
+forever: jmp forever
+
+end:
+
+; Pad so there's a good number of blocs used in the disk
+times 1024 * 1024 db 0

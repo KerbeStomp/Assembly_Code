@@ -1,0 +1,70 @@
+;;;; 
+;;;; xoroshiro64.s
+;;;;
+section .data
+
+s0:         dd      137546 
+s1:         dd      729 
+
+buffer:     dd      0            
+
+section .text
+
+global _start
+_start:
+
+    push rbp
+    mov rbp, rsp
+
+.loop:
+
+    call next
+    mov dword [buffer], eax ; Return value from next in eax
+
+    mov rax, 1          ; Write syscall
+    mov rdi, 1          ; Stdout
+    mov rsi, buffer     ; Address 
+    mov rdx, 4          ; Length
+    syscall
+
+    jmp .loop
+
+    pop rbp
+
+    mov rax, 60
+    mov rdi, 0
+    syscall
+
+next: 
+    ; Next function here. 
+	; set up variables
+	mov r12d, dword[s0]
+	mov r13d, dword[s1]
+	mov ebx, 0x9E3779BB	
+
+	; clear operator registers
+	xor rax, rax
+	xor rdx, rdx
+
+	; calcualte result
+	mov eax, r12d
+	mul ebx
+	rol eax, 5
+	mov ebx, eax
+	shl ebx, 2
+	add eax, ebx
+
+	; update s0
+	xor r13d, r12d
+	rol r12d, 26
+	xor r12d, r13d
+	rol r13d, 9
+	xor r12d, r13d
+	mov dword[s0], r12d
+
+	; update s1
+	rol r13d, 4
+	mov dword[s1], r13d
+
+	; Return results in eax.
+    ret 
