@@ -1,0 +1,12 @@
+
+    Stack
+
+|            |
+|            |
+|            |
+|            | 
+| Saved rbp  | <- rbp
+|  (grade)   | <- rbp - 8 
+| (unused)   | <- rsp
+|            |
+|            |

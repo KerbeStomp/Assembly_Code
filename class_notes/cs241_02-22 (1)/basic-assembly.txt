@@ -1,0 +1,409 @@
+Review of last time
+===================
+
+(Please type your name in the chat, thanks!)
+
+Our first x86-64 Linux assembly program
+---------------------------------------
+
+    ;;;
+    ;;; hello.s
+    ;;; 
+    section .data
+
+  1.  Assembly programs are broken into *sections*. The predefined sections
+      are:
+
+        .data          Global read/write data
+        .rodata        Global read-only data
+        .bss           Global *uninitialized* read/write data
+        .text          Executable code
+
+      The sections are all independent of each other, so you can put them in
+      any order in your source code. (You could even split them up.)
+
+  2.  We need to store the string to be printed in the .data section, and save
+      its address for later use. We ask the assembler to save an address by
+      *labeling* the line:
+
+            msg:    db "Hello, world!", 10
+
+      Here, the label `msg` "saves" the address of the string to be printed.
+      The assembler will search-and-replace `msg` in the source code with
+      the address. 
+
+      `db` stands for Data Bytes, whatever comes after the `db` is interpreted
+      as a sequence of bytes to be saved into the program. 
+
+        db 0               ; Stores 0 as a byte
+        dw 0               ; Stores 0 as a word (2 bytes)
+        dd 0               ; Stores 0 as a dword (4 bytes)
+        dq 0               ; Stores 0 as a qword (8 bytes)        
+
+  3.  We also need the length of the string, so we use an `equ` to save it:
+
+            MSGLEN: equ ($ - msg)
+
+      `equ` changes the way the label works, so that instead of saving the
+      address it just saves the number given (14).
+
+      The formula `$ - msg` subtracts the start of the msg string from the
+      current address ($), which is at the end of the string, giving the 
+      length. 
+
+      Note that labels are *not* like variables: you cannot put a different
+      value into them later. Each label must have a single unique definition,
+      per source file. 
+
+  4.  Every (syscall-style) assembly program starts with the `_start` 
+      function.
+
+        global _start
+        _start:
+
+  5.  We're writing a syscall-style program, talking to the operating system
+      directly. We perform a syscall by loading some registers with the 
+      *arguments* to the syscall, and then execute the `syscall` instruction. 
+
+      Registers are like predefined global variables that live on the CPU. 
+      x86-64 has 16 registers (all qword-sized) available for us to use:
+
+        rax, rbx, rcx, rdx, rdi, rsi, rbp, rsp, r8 -- r15
+                                            ↑
+                                          stack
+
+      Syscalls expect the registers to be used in a specific way:
+
+        *  rax contains the *syscall code*; this is a number that identifies
+           the particular command we are sending to the OS. Depending on the 
+           command, that determines how many of the other registers are used,
+           and what for. 
+
+        *  rdi, rsi, rdx, r10, r8, r9 contain the six possible arguments to 
+           the syscall command. E.g., if your syscall takes three arguments,
+           you'd put them into rdi, rsi, and rdx and ignore the other three.
+
+  6.  The `mov` instruction is like an assignment:
+
+        mov    rax,   SYS_WRITE          ; = 1
+        mov    rdi,   STDOUT             ; = 1
+        mov    rsi,   msg                ; Address of string/buffer to print
+        mov    rdx,   MSGLEN             ; Number of bytes to write
+
+  7.  syscall-style programs do not end with `return 0;` (or its assembly
+      equivalent), they end with the SYS_EXIT syscall. 
+      
+### The objdump utility
+
+You can use the objdump utility to disassble an object file:
+
+    objdump -d -M intel   FILENAME.o
+
+This will print out the assembly corresponding to the code in FILENAME.o.             
+          
+### `asm` vs. `yasm` 
+
+The `asm` command is a script that wraps up `yasm`. If you want to run 
+YASM by hand:
+
+    yasm -g dwarf2 -f elf64   hello.s  -l hello.lst
+         ╰───┬───╯ ╰───┬───╯ ╰───┬───╯ ╰─────┬─────╯
+           debug    execut.    source     listing
+                    format      file       file
+
+This will generate the object file hello.o. We still need to run this through
+the linker so that the memory layout can be determined and so forth:
+
+    ld -g -o hello hello.o
+
+    ./hello
+
+Operands and Registers
+----------------------
+
+The `mov` instruction (and almost every instruction) takes a number of 
+*operands* as its input. `mov` always takes exactly two operands: the first
+is the *destination* and the second is the *source*:
+
+    mov DESTINATION, SOURCE                 ; DESTINATION = SOURCE
+
+(The DESTINATION, SOURCE order is common to many instruction.)
+
+What kinds of things can operands be?
+
+  *  A register name: `rax`, `rdx`, etc. 
+
+  *  A constant: 12, msg, MSGLEN. In assembly language, constants are called
+     *immediates*. 
+
+     The assembler can do arithmetic, so `MSGLEN - 2` still counts as an
+     immediate. 
+
+  *  A *memory* operand [ ... ]. A memory operand is like dereferencing a 
+     pointer. E.g., if we add
+
+        mov byte [msg], 'J'        ; byte [msg] = 'J'
+
+     then the program prints "Jello, everyone!". Note that this:
+
+        mov msg, 'J'               ; ERROR
+
+     is an error. The first (destination) operand to `mov` cannot be an
+     immediate. (This is equivalent to something like `14 = 'J';` in C++.)
+
+     Note that because you can do arithmetic on immediates, so you can do 
+     things like
+
+        mov byte [msg + 1], 'J'
+
+     to replace the 'e' (in Hello) with a 'J'. 
+
+     The `byte` says that we want to operate on byte-sized elements of memory.
+     You can operate on larger amounts of memory (word, dword, qword) if you
+     make the character constant bigger as well:
+
+        mov word [msg],  'Ja'
+        mov dword [msg], 'Jabc'
+        ⋮
+
+     You can leave off the byte/word/dword/qword and it will use the size of
+     the other operand. It's easy to mess this up, so I always put it on.
+
+The sizes of both operands to `mov` *must* be exactly the same. 
+
+### Registers
+
+Registers are sort of like global variables which live on the CPU itself. There
+is a pre-defined set of registers, and you cannot create new ones (or rename
+existing ones):
+
+    rax, rbx, rcx, rdx, rdi, rsi, rsp, rbp, r8, r9, r10, ..., r14, r15   
+                                   ↑
+                                reserved
+                                  for
+                                 stack
+
+All of these are qword sized, but you can access smaller "portions" of them,
+if you need something smaller:
+
+    |----------------------- rax (64 bits) -----------------------|
+                                 |--------- eax (32 bits) --------|
+                                                |- ax (16 bits) --|
+                                                |-- ah --|-- al --|
+
+  *  The low dword of `rax` can be accessed as `eax`. 
+
+  *  The low word of `eax` (and `rax`) can be accessed as `ax`
+
+  *  The low byte of `ax` (`rax`) can be accessed as `al`. 
+
+  *  The first four registers provide access to the second byte through
+     `ah`, `bh`, `ch`, and `dh`. These are somewhat historical, and have 
+     restrictions on what you can do with them. 
+
+    qword   dword   word   byte     Comment
+    -----------------------------------------------------------------
+    rax     eax     ax     al       "Accumulator", Syscall code
+    rbx     ebx     bx     bl       "Base"
+    rcx     ecx     cx     cl       "Count" *
+    rdx     edx     dx     dl       "Dword accumulator", 3rd arg.
+
+    rsi     esi     si     sil      "Source index", 2nd arg.
+    rdi     edi     di     dil      "Dest. index", 1st arg.
+    rbp     ebp     bp     bpl      "Base pointer"
+    rsp     esp     sp     spl      "Stack pointer"
+
+    r8      r8d     r8w    r8b      5th arg.
+    r9      r9d     r9w    r9b      6th arg.
+    r10     r10d    r10w   r10b     4th arg.
+    r11     r11d    r11w   r11b     * 
+    ⋮       ⋮       ⋮      ⋮
+    r15     r15d    r15w   r15b  
+
+You have a total of 16 registers available for use (with some reserved for use
+with syscalls). Registers `rcx` and `r11` (marked with *) are allowed to be
+*clobbered* by syscalls. This means if you are using `rcx`/`r11` and you want
+to call a syscall, you have to save the value(s) in this register *before*
+the syscall, and then restore it back after. 
+
+### Other registers
+
+Flags: `rif`. The individual bits of the flags register either indicate that
+certain events have happened, or control how the CPU behaves. For example, 
+one of the bits in the flags register is the Zero Flag ZF, which is set to 1
+if the result of the instruction was 0. 
+
+Floating-point: floating-point uses its own set of registers, called the XMM
+registers: `xmm0` - `xmm15`. All of these are double-qword (128-bit) sized.
+
+Instruction pointer: `rip`. `rip` always contains the address of the *next*
+instruction to be executed. 
+
+Doing input and output
+----------------------
+
+We want to write a program that lets the user type in their name and then
+prints it back at them.
+
+In order to do this, we need another syscall, SYS_READ:
+
+  *  Syscall code = 0
+
+  *  `rdi` = input stream to read from, standard input is stream 0. 
+
+  *  `rsi` = addr. of buffer to read characters into.
+
+  *  `rdx` = max. number of characters to read (i.e., the length of the buffer)
+
+  *  When the SYS_READ returns, it will put the number of characters read in
+     into `rax`. 
+
+To create the buffer, we use
+
+    buffer:     times BUFLEN db 0 
+
+This says to repeat the instruction `db 0`, BUFLEN many times, as if we had
+written:
+
+    db 0
+    db 0
+    db 0
+    ⋮
+
+The SYS_READ is straightforward:
+
+    mov     rax,    SYS_READ
+    mov     rdi,    STDIN
+    mov     rsi,    buffer
+    mov     rdx,    BUFLEN
+    syscall
+
+but then, when we do the SYS_WRITE, we want to set the length to be the 
+number of characters read in by SYS_READ, so copy it from rax into rdx first:
+
+    mov     rdx,    rax            ; rdx = num. of chars to print.
+    mov     rax,    SYS_WRITE
+    mov     rdi,    STDOUT
+    mov     rsi,    buffer    
+    syscall
+
+Because we're going to set `rax` to SYS_WRITE (=1), we have to get the old
+value of `rax` into `rdx` first.
+
+    ;;;
+    ;;; input-output.s
+    ;;; Reads in the user's name, then prints it back out.
+    ;;;
+    section .data
+
+    SYS_READ:   equ     0
+    SYS_WRITE:  equ     1
+    STDIN:      equ     0
+    STDOUT:     equ     1
+    SYS_EXIT:   equ     60
+
+    BUFLEN:     equ     256
+    buffer:     times BUFLEN db '!' 
+
+    section .text
+
+    global _start
+    _start:
+        ; Read input into the buffer
+        mov     rax,    SYS_READ
+        mov     rdi,    STDIN
+        mov     rsi,    buffer
+        mov     rdx,    BUFLEN
+        syscall
+
+        ; rax = number of characters input
+        
+        mov     rdx,    rax            ; rdx = num. of chars to print.
+        mov     rax,    SYS_WRITE
+        mov     rdi,    STDOUT
+        mov     rsi,    buffer    
+        syscall
+
+        mov     rax,    SYS_EXIT
+        mov     rdi,    0
+        syscall
+
+Summary
+-------
+
+  *  The `mov` instruction is assembly's assignment
+
+  *  The operands to `mov` are DESTINATION, and SOURCE. The DESTINATION can be
+     either a register or memory operand. The SOURCE can be register, memory,
+     or immediate (constant). Both operands to `mov` must have the same size.
+
+  *  The SYS_READ syscall has syscall code 0, takes 3 arguments, and 
+     "returns" the  number of bytes read in.
+
+  *  There are 16 general-purpose registers available for us to use. (But
+     avoid `rsp` if you're using the stack.) Each register comes in qword,
+     dword, word, and byte versions.
+        
+Basic arithmetic instructions
+-----------------------------
+
+The two basic arithmetic instructions in assembly are `add` and `sub`:
+
+    add DESTINATION, SOURCE              ; DESTINATION = DESTINATION + SOURCE
+    sub DESTINATION, SOURCE              ; DESTINATION = DESTINATION - SOURCE
+
+Just like with `mov`, both DESTINATION and SOURCE must have the same size. Both
+instructions update the flags register based on their results. E.g.,
+
+    mov rax, 10
+    mov rbx, 10
+    sub rax, rbx                 ; rax = rax - rbx
+
+This would set the ZF (zero flag) to 1, because the result is 0. 
+
+### Binary addition
+
+   128 64 32 16 8  4  2  1 
+    2⁷ 2⁶ 2⁵ 2⁴ 2³ 2² 2¹ 2⁰
+
+             1  1  1  1
+    0  0  1  0  1  1  0  1              = 45
+  + 0  0  0  0  1  1  1  1              = 15
+————————————————————————————
+    0  0  1  1  1  1  0  0              = 60
+
+In binary, we only have digits 0 and 1, so 
+
+    C   A   B   
+    —————————————————
+    0 + 0 + 0 = 00
+    0 + 0 + 1 = 01
+    0 + 1 + 0 = 01
+    0 + 1 + 1 = 10
+
+    1 + 0 + 0 = 01
+    1 + 0 + 1 = 10
+    1 + 1 + 0 = 10
+    1 + 1 + 1 = 11
+
+Sometimes you carry all the way to the left:
+
+1   1  1  1  1  1  1  1  
+    1  1  1  1  1  1  1  1               = 255
+ +  0  0  0  0  0  0  0  1               = 1
+———————————————————————————
+    0  0  0  0  0  0  0  0               = 0
+
+In this case, we get an extra carry and the result of 1 + 255 = 0. The result
+that we *should* get, 256, cannot be stored in a single byte. The extra carry
+will set the Carry Flag (CF). 
+
+    ZF = 1  (result is all 0s)
+    CF = 1  (had an extra carry)
+
+
+
+  
+          
+
+        
